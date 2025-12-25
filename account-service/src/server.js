@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 4002;
 const startServer = async () => {
   await initDB(); // initialize tables
   app.listen(PORT, () => {
-    console.log(`Auth service running on port ${PORT}`);
+    console.log(`Account service running on port ${PORT}`);
   });
 };
 
