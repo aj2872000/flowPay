@@ -3,6 +3,6 @@ const controller = require('../controllers/subscription.controller');
 
 router.post('/', controller.subscribe);
 router.put('/:id/cancel', controller.cancel);
-router.get('/user/:userId', controller.getUserSubscriptions);
+router.get('/user', controller.getUserSubscriptions);
 
 module.exports = router;

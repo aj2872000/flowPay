@@ -2,7 +2,8 @@ const subscriptionService = require('../services/subscription.service');
 
 exports.subscribe = async (req, res) => {
   try {
-    const { userId, planId } = req.body;
+    const userId = req.user.userId;
+    const { planId } = req.body;
     const sub = await subscriptionService.createSubscription(userId, planId);
     res.status(201).json(sub);
   } catch (err) {
@@ -21,7 +22,8 @@ exports.cancel = async (req, res) => {
 
 exports.getUserSubscriptions = async (req, res) => {
   try {
-    const subs = await subscriptionService.getUserSubscriptions(req.params.userId);
+    const userId = req.user.userId;
+    const subs = await subscriptionService.getUserSubscriptions(userId);
     res.json(subs);
   } catch (err) {
     res.status(500).json({ error: err.message });
