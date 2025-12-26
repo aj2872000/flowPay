@@ -1,5 +1,6 @@
 const BillingService = require('../services/billing.service');
 const { checkIdempotency } = require('../utils/idempotency');
+const PaymentSimulatorClient = require('../utils/paymentSimulatorClient')
 
 exports.generateInvoice = async (req, res) => {
   try {
@@ -21,6 +22,17 @@ exports.generateInvoice = async (req, res) => {
       amount,
       idempotencyKey
     });
+
+    // Call Payment-Simulator Service 
+    await PaymentSimulatorClient.simulatePayment(
+      {
+        orderId: invoice.id,
+        userId,
+        amount: invoice.amount,
+        scenario:'failure'
+      },
+      req.headers.authorization,
+    );
 
     res.status(201).json(invoice);
   } catch (err) {

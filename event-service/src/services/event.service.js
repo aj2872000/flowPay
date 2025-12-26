@@ -5,7 +5,7 @@ const {
   markProcessed
 } = require("../models/event.model");
 
-const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL 
+// const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL 
 
 const processEvent = async (event) => {
   // 1. Deduplication
@@ -18,11 +18,11 @@ const processEvent = async (event) => {
   await createEvent(event);
 
   // 3. Notify Billing Service
-  await axios.post(`${BILLING_SERVICE_URL}/internal/events`, {
-    eventId: event.id,
-    type: event.event_type,
-    payload: event.payload
-  });
+  // await axios.post(`${BILLING_SERVICE_URL}/internal/events`, {
+  //   eventId: event.id,
+  //   type: event.event_type,
+  //   payload: event.payload
+  // });
 
   // 4. Mark processed
   await markProcessed(event.id);

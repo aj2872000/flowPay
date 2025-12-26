@@ -5,9 +5,9 @@ const receiveEvent = async (req, res) => {
   try {
     const event = {
       id: req.body.id || uuidv4(),
-      event_type: req.body.event_type,
+      event_type: req.body.status,
       source: req.body.source || "payment-service",
-      payload: req.body.payload
+      payload: req.body
     };
 
     const result = await processEvent(event);

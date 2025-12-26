@@ -50,11 +50,11 @@ exports.simulateWebhook = (req, res) => {
 };
 
 /**
- * Trigger webhook to Billing Service
+ * Trigger webhook to Event Service
  */
 async function triggerWebhook(orderId, paymentId, status) {
   try {
-    await axios.post(process.env.BILLING_WEBHOOK_URL, {
+    await axios.post(`${process.env.EVENT_SERVICE_URL}/api/events`, {
       orderId,
       paymentId,
       status,
