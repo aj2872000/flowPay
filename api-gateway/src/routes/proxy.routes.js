@@ -36,7 +36,8 @@ router.use(
   createProxyMiddleware({
     target: SERVICES.account,
     changeOrigin: true,
-    pathRewrite: { '^/account': '' }
+    pathRewrite: { '^/api/account': '' },
+    onProxyReq: fixRequestBody
   })
 );
 

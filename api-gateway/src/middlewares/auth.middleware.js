@@ -11,7 +11,7 @@ module.exports = async function authMiddleware(req, res, next) {
     }
 
     const response = await httpClient.get(
-      `${AUTH_SERVICE_URL}/auth/validate`,
+      `${AUTH_SERVICE_URL}/auth/profile`,
       {
         headers: {
           Authorization: authHeader
@@ -20,7 +20,7 @@ module.exports = async function authMiddleware(req, res, next) {
     );
 
     // Attach user info for downstream services
-    req.user = response.data.user;
+    // req.user = response.data.user;
     next();
 
   } catch (err) {
