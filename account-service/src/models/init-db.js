@@ -10,7 +10,7 @@ const initDB = async () => {
             CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- For gen_random_uuid()
 
             CREATE TABLE IF NOT EXISTS plans (
-                id SERIAL PRIMARY KEY,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 name VARCHAR(50) NOT NULL,
                 price NUMERIC(10,2) NOT NULL,
                 duration_days INT NOT NULL,
@@ -18,9 +18,9 @@ const initDB = async () => {
             );
 
             CREATE TABLE IF NOT EXISTS subscriptions (
-                id SERIAL PRIMARY KEY,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id VARCHAR(50) NOT NULL,
-                plan_id INT REFERENCES plans(id),
+                plan_id UUID REFERENCES plans(id),
                 status VARCHAR(20) DEFAULT 'ACTIVE',
                 start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 end_date TIMESTAMP

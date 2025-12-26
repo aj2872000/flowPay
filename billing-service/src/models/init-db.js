@@ -10,7 +10,7 @@ const initDB = async () => {
             CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- For gen_random_uuid()
 
             CREATE TABLE IF NOT EXISTS invoices (
-                id UUID PRIMARY KEY,
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id UUID NOT NULL,
                 subscription_id UUID NOT NULL,
                 amount NUMERIC NOT NULL,

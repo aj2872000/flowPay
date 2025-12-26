@@ -3,7 +3,7 @@ const { checkIdempotency } = require('../utils/idempotency');
 
 exports.generateInvoice = async (req, res) => {
   try {
-    const { subscriptionId, amount } = req.body;
+    const { subscriptionId, amount, userId } = req.body;
     const idempotencyKey = req.headers['idempotency-key'];
 
     if (!idempotencyKey) {
@@ -16,7 +16,7 @@ exports.generateInvoice = async (req, res) => {
     }
 
     const invoice = await BillingService.createInvoice({
-      userId: req.user.id,
+      userId: userId,
       subscriptionId,
       amount,
       idempotencyKey
