@@ -22,7 +22,7 @@ router.use(
   createProxyMiddleware({
     target: SERVICES.auth,
     changeOrigin: true,
-    pathRewrite: { '^/auth': '' }
+    pathRewrite: { '^/api': '' }
   })
 );
 

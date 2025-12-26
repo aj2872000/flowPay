@@ -5,9 +5,10 @@ const proxyRoutes = require('./routes/proxy.routes');
 const app = express();
 
 app.use(cors());
-app.use(express.json());
 
 app.use('/api', proxyRoutes);
+
+app.use(express.json());
 
 /**
  * Global error handler
@@ -18,6 +19,10 @@ app.use((err, req, res, next) => {
   res.status(500).json({
     error: 'Internal Gateway Error'
   });
+});
+
+app.get('/health', (req, res) => {
+  res.send('Api gateway Service is running');
 });
 
 module.exports = app;
