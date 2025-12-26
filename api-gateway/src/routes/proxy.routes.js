@@ -1,5 +1,5 @@
 const express = require('express');
-const { createProxyMiddleware } = require('http-proxy-middleware');
+const { createProxyMiddleware, fixRequestBody } = require('http-proxy-middleware');
 const authMiddleware = require('../middlewares/auth.middleware');
 
 const router = express.Router();
@@ -22,7 +22,8 @@ router.use(
   createProxyMiddleware({
     target: SERVICES.auth,
     changeOrigin: true,
-    pathRewrite: { '^/api': '' }
+    pathRewrite: { '^/api': '' },
+    onProxyReq: fixRequestBody
   })
 );
 
