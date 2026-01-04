@@ -24,7 +24,7 @@ exports.generateInvoice = async (req, res) => {
     });
 
     // Call Payment-Simulator Service 
-    await PaymentSimulatorClient.simulatePayment(
+    PaymentSimulatorClient.simulatePayment(
       {
         orderId: invoice.id,
         userId,

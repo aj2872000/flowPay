@@ -4,7 +4,7 @@ const { processEvent } = require("../services/event.service");
 const receiveEvent = async (req, res) => {
   try {
     const event = {
-      id: req.body.id || uuidv4(),
+      id: req.body.eventId,
       event_type: req.body.status,
       source: req.body.source || "payment-service",
       payload: req.body

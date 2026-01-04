@@ -10,6 +10,7 @@ exports.simulatePayment = async (req, res) => {
   const { orderId, amount, scenario } = req.body;
 
   const paymentId = uuidv4();
+  const eventId = uuidv4();
 
   let status = 'SUCCESS';
   let delay = 0;
@@ -26,11 +27,11 @@ exports.simulatePayment = async (req, res) => {
     );
 
     // trigger webhook
-    await triggerWebhook(orderId, paymentId, status);
+    await triggerWebhook(eventId, orderId, paymentId, status);
 
     // duplicate webhook
     if (scenario === 'duplicate') {
-      await triggerWebhook(orderId, paymentId, status);
+      await triggerWebhook(eventId, orderId, paymentId, status);
     }
   }, delay);
 
@@ -52,9 +53,10 @@ exports.simulateWebhook = (req, res) => {
 /**
  * Trigger webhook to Event Service
  */
-async function triggerWebhook(orderId, paymentId, status) {
+async function triggerWebhook(eventId, orderId, paymentId, status) {
   try {
     await axios.post(`${process.env.EVENT_SERVICE_URL}/api/events`, {
+      eventId,
       orderId,
       paymentId,
       status,

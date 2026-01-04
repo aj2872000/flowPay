@@ -5,11 +5,14 @@ exports.subscribe = async (req, res) => {
   try {
     const userId = req.user.userId;
     const { planId, amount } = req.body;
+    // implement this
+    // ❌ A user cannot have multiple ACTIVE subscriptions for the same plan
+    // ✅ A user can have multiple subscriptions over time (history)
     const subscription = await subscriptionService.createSubscription(userId, planId);
 
     // Call Billing Service (side-effect)
     const idempotencyKey = `inv:${subscription.id}`;
-    await billingClient.createInvoice(
+    billingClient.createInvoice(
       {
         subscriptionId: subscription.id,
         userId,

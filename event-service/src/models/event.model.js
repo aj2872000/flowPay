@@ -21,10 +21,10 @@ const eventExists = async (id) => {
   return result.rowCount > 0;
 };
 
-const markProcessed = async (id) => {
+const markProcessed = async (id, status) => {
   await pool.query(
-    "UPDATE events SET processed = true WHERE id = $1",
-    [id]
+    "UPDATE events SET event_type = $1 WHERE id = $2",
+    [status,id]
   );
 };
 
