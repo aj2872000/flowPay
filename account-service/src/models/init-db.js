@@ -21,7 +21,7 @@ const initDB = async () => {
                 id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                 user_id VARCHAR(50) NOT NULL,
                 plan_id UUID REFERENCES plans(id),
-                status VARCHAR(20) DEFAULT 'ACTIVE',
+                status VARCHAR(20) DEFAULT 'PENDING',
                 start_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 end_date TIMESTAMP
             );
