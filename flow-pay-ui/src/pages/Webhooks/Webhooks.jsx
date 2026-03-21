@@ -18,7 +18,7 @@ const ALL_EVENT_TYPES = [
 ];
 
 export default function Webhooks({ addToast }) {
-  const { data: webhooks, loading, error, refetch } = useApi(eventApi.listWebhooks, []);
+  const { data: webhooks, loading, error, refetch } = useApi(eventApi.listWebhooks);
 
   const [showModal,  setShowModal]  = useState(false);
   const [form, setForm] = useState({ url: "", events: [] });

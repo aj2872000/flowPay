@@ -3,4 +3,4 @@
 .env
 # Ignore the .env file in each service, but keep the example files
 */.env  
-.env.example
+
