@@ -10,7 +10,7 @@ subscription creation and can be manually retried from the UI.
 If you need background jobs later, use Vercel Cron Jobs (Pro plan) or
 Railway/Render for those two services.
 
----
+--
 
 ## Step 1 — MongoDB Atlas setup
 
