@@ -24,16 +24,22 @@ function Toggle({ on, onChange }) {
 }
 
 export default function Settings({ addToast }) {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
-  // Profile
+  // Single profile fetch — used for both profile form AND notifications
   const { data: profile, loading: profileLoading, refetch: refetchProfile } =
-    useApi(accountApi.getProfile, []);
+    useApi(accountApi.getProfile);
+
   const [profileForm, setProfileForm] = useState({ name: "", email: "" });
+  const [notifs,      setNotifs]      = useState({});
+
   useEffect(() => {
-    console.log("Profile data:", profile);
-    if (profile) setProfileForm({ name: profile.name || "", email: profile.email || "" });
+    if (profile) {
+      setProfileForm({ name: profile.name || "", email: profile.email || "" });
+      setNotifs(profile.notifications || {});
+    }
   }, [profile]);
+
   const { mutate: updateProfile, loading: savingProfile } = useMutation(accountApi.updateProfile);
 
   const handleSaveProfile = async () => {
@@ -46,10 +52,10 @@ export default function Settings({ addToast }) {
 
   // API Keys
   const { data: apiKeys, loading: keysLoading, refetch: refetchKeys } =
-    useApi(accountApi.getApiKeys, []);
-  const [visibleKeys, setVisibleKeys] = useState({});
-  const { mutate: rotateKey, loading: rotating } = useMutation(accountApi.rotateApiKey);
+    useApi(accountApi.getApiKeys);
+  const [visibleKeys,    setVisibleKeys]    = useState({});
   const [rotatedSecrets, setRotatedSecrets] = useState({});
+  const { mutate: rotateKey, loading: rotating } = useMutation(accountApi.rotateApiKey);
 
   const handleRotate = async (keyId) => {
     if (!window.confirm("Rotate this key? The current key will be invalidated immediately.")) return;
@@ -62,11 +68,6 @@ export default function Settings({ addToast }) {
   };
 
   // Notifications
-  const { data: profileData, refetch: refetchNotifs } = useApi(accountApi.getProfile, []);
-  const [notifs, setNotifs] = useState({});
-  useEffect(() => {
-    if (profileData?.notifications) setNotifs(profileData.notifications);
-  }, [profileData]);
   const { mutate: updateNotifs } = useMutation(accountApi.updateNotifications);
 
   const handleToggleNotif = async (key) => {
@@ -83,7 +84,7 @@ export default function Settings({ addToast }) {
 
   // Delete account
   const { mutate: deleteAccount, loading: deleting } = useMutation(accountApi.deleteAccount);
-  const { logout } = useAuth();
+
   const handleDelete = async () => {
     if (!window.confirm("Permanently delete your account? This cannot be undone.")) return;
     if (!window.confirm("Are you absolutely sure?")) return;
@@ -97,7 +98,7 @@ export default function Settings({ addToast }) {
 
   return (
     <div className="settings__grid">
-      {/* ── Profile ── */}
+      {/* Profile */}
       <div className="card">
         <div className="card-header"><span className="card-title">Profile</span></div>
         {profileLoading ? (
@@ -116,8 +117,9 @@ export default function Settings({ addToast }) {
             </div>
             <div className="form-group">
               <label className="form-label">Role</label>
-              <input className="form-input" value={user?.role || profile?.role || ""} disabled
-                style={{ opacity: 0.6 }} />
+              <input className="form-input"
+                value={user?.role === "admin" ? "Admin" : "User"}
+                disabled style={{ opacity: 0.6 }} />
             </div>
             <Button variant="primary" onClick={handleSaveProfile} disabled={savingProfile}>
               {savingProfile ? "Saving…" : "Save Changes"}
@@ -126,7 +128,7 @@ export default function Settings({ addToast }) {
         )}
       </div>
 
-      {/* ── API Keys ── */}
+      {/* API Keys */}
       <div className="card">
         <div className="card-header"><span className="card-title">API Keys</span></div>
         {keysLoading ? (
@@ -135,22 +137,27 @@ export default function Settings({ addToast }) {
           <div className="text-muted text-sm">No API keys found</div>
         ) : keys.map((k) => (
           <div key={k.id} className="form-group">
-            <label className="form-label">{k.type === "live" ? "Live" : "Test"} Secret Key</label>
+            <label className="form-label">
+              {k.type === "live" ? "Live" : "Test"} Secret Key
+            </label>
             {rotatedSecrets[k.id] ? (
               <div className="settings__new-key">
-                <div className="settings__new-key-banner">⚠ Copy now — shown only once</div>
+                <div className="settings__new-key-banner">Copy now — shown only once</div>
                 <div className="flex gap-8">
-                  <input className="form-input settings__key-input" value={rotatedSecrets[k.id]} readOnly />
-                  <Button variant="ghost" size="sm"
-                    onClick={() => { navigator.clipboard.writeText(rotatedSecrets[k.id]); addToast("Copied!", "success"); }}>
-                    Copy
-                  </Button>
+                  <input className="form-input settings__key-input"
+                    value={rotatedSecrets[k.id]} readOnly />
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    navigator.clipboard?.writeText(rotatedSecrets[k.id]);
+                    addToast("Copied!", "success");
+                  }}>Copy</Button>
                 </div>
               </div>
             ) : (
               <div className="flex gap-8">
                 <input className="form-input settings__key-input"
-                  value={visibleKeys[k.id] ? `${k.prefix}${"•".repeat(28)}${k.last4}` : `${k.prefix}••••••••••••••••••••••••${k.last4}`}
+                  value={visibleKeys[k.id]
+                    ? `${k.prefix}${"•".repeat(28)}${k.last4}`
+                    : `${k.prefix}••••••••••••••••••••••••${k.last4}`}
                   readOnly />
                 <Button variant="ghost" size="sm"
                   onClick={() => setVisibleKeys((p) => ({ ...p, [k.id]: !p[k.id] }))}>
@@ -167,10 +174,12 @@ export default function Settings({ addToast }) {
         ))}
       </div>
 
-      {/* ── Notifications ── */}
+      {/* Notifications */}
       <div className="card">
         <div className="card-header"><span className="card-title">Notifications</span></div>
-        {NOTIFICATION_KEYS.map((n) => (
+        {profileLoading ? (
+          <div className="text-muted text-sm">Loading…</div>
+        ) : NOTIFICATION_KEYS.map((n) => (
           <div key={n.key} className="settings__notif-row">
             <span className="settings__notif-label">{n.label}</span>
             <Toggle on={!!notifs[n.key]} onChange={() => handleToggleNotif(n.key)} />
@@ -178,19 +187,31 @@ export default function Settings({ addToast }) {
         ))}
       </div>
 
-      {/* ── Danger zone ── */}
-      <div className="card">
-        <div className="card-header"><span className="card-title">Danger Zone</span></div>
-        <div className="settings__danger-box">
-          <div className="settings__danger-title">Delete Account</div>
-          <div className="text-muted text-sm">
-            Permanently delete your account and all data. This cannot be undone.
+      {/* Danger zone — only admin can delete */}
+      {user?.role === "admin" ? (
+        <div className="card">
+          <div className="card-header"><span className="card-title">Danger Zone</span></div>
+          <div className="settings__danger-box">
+            <div className="settings__danger-title">Delete Account</div>
+            <div className="text-muted text-sm">
+              Permanently deletes your account and all data. Cannot be undone.
+            </div>
+          </div>
+          <Button variant="danger" onClick={handleDelete} disabled={deleting}>
+            {deleting ? "Deleting…" : "Delete Account"}
+          </Button>
+        </div>
+      ) : (
+        <div className="card">
+          <div className="card-header"><span className="card-title">Account</span></div>
+          <div className="text-muted text-sm" style={{ padding: "8px 0" }}>
+            Contact an admin to delete this account.
+          </div>
+          <div className="role-notice" style={{ marginTop: 8 }}>
+            Your role is <strong>User</strong>. Admin actions are restricted.
           </div>
         </div>
-        <Button variant="danger" onClick={handleDelete} disabled={deleting}>
-          {deleting ? "Deleting…" : "Delete Account"}
-        </Button>
-      </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,9 @@
 import { useState } from "react";
-import Button from "../../components/common/Button/Button";
+import Button     from "../../components/common/Button/Button";
 import Modal, { ModalActions } from "../../components/common/Modal/Modal";
 import EmptyState from "../../components/common/EmptyState/EmptyState";
 import { useApi, useMutation } from "../../hooks/useApi";
+import { useAuth } from "../../context/AuthContext";
 import { billingApi } from "../../api/billing.api";
 import { fmt, fmtNum } from "../../utils/helpers";
 import "./Plans.css";
@@ -10,16 +11,18 @@ import "./Plans.css";
 const PLAN_COLORS = ["#38bdf8", "#818cf8", "#f59e0b", "#22d3a3", "#f56565"];
 
 export default function Plans({ addToast }) {
-  const { data: plans, loading, error, refetch } = useApi(billingApi.listPlans, []);
+  const { user } = useAuth();
+  const isAdmin  = user?.role === "admin";
+
+  const { data: plans, loading, error, refetch } = useApi(billingApi.listPlans);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", price: "", interval: "month", features: "" });
 
   const { mutate: createPlan, loading: creating } = useMutation(billingApi.createPlan);
   const { mutate: archivePlan } = useMutation(billingApi.archivePlan);
 
-  const planList   = plans || [];
-  const totalMrr   = planList.reduce((s, p) => s + (p.price || 0) * (p.subscribers || 0), 0);
-  const totalSubs  = planList.reduce((s, p) => s + (p.subscribers || 0), 0);
+  const planList = plans || [];
+  const totalMrr = planList.reduce((s, p) => s + (p.price || 0) * (p.subscribers || 0), 0);
 
   const handleCreate = async () => {
     if (!form.name || !form.price) { addToast("Name and price are required", "error"); return; }
@@ -51,17 +54,26 @@ export default function Plans({ addToast }) {
       <div className="plans__header">
         <div>
           <div className="plans__title">Billing Plans</div>
-          <div className="text-muted text-sm">Manage your subscription tiers and pricing</div>
+          <div className="text-muted text-sm">Subscription tiers and pricing</div>
         </div>
-        <Button variant="primary" onClick={() => setShowModal(true)}>+ New Plan</Button>
+        {/* Admin only */}
+        {isAdmin && (
+          <Button variant="primary" onClick={() => setShowModal(true)}>+ New Plan</Button>
+        )}
       </div>
+
+      {!isAdmin && (
+        <div className="role-notice">
+          You can view plans. Contact an admin to create or modify plans.
+        </div>
+      )}
 
       {error && <div className="api-error">{error}</div>}
 
       {loading ? (
         <div className="text-muted text-sm">Loading plans…</div>
       ) : planList.length === 0 ? (
-        <EmptyState icon="🏷" text="No plans yet — create your first one" />
+        <EmptyState icon="🏷" text="No plans yet" />
       ) : (
         <div className="plans__grid">
           {planList.map((p, i) => {
@@ -73,7 +85,7 @@ export default function Plans({ addToast }) {
                     <div className="plan-card__name" style={{ color }}>{p.name}</div>
                     <div className="text-muted text-sm">{fmtNum(p.subscribers || 0)} subscribers</div>
                   </div>
-                  <div className="plan-card__dot" style={{ background: color, boxShadow: `0 0 12px ${color}` }} />
+                  <div className="plan-card__dot" style={{ background: color }} />
                 </div>
                 <div className="plan-card__price" style={{ color }}>
                   <sup>$</sup>{(p.price || 0).toLocaleString()}<sub>/{p.interval}</sub>
@@ -84,10 +96,12 @@ export default function Plans({ addToast }) {
                     <div key={f} className="plan-card__feature">✓ {f}</div>
                   ))}
                 </div>
-                <div className="flex gap-8">
-                  <Button variant="ghost" size="sm" fullWidth
-                    onClick={() => handleArchive(p)}>Archive</Button>
-                </div>
+                {/* Archive only for admin */}
+                {isAdmin && (
+                  <Button variant="ghost" size="sm" fullWidth onClick={() => handleArchive(p)}>
+                    Archive
+                  </Button>
+                )}
               </div>
             );
           })}
@@ -103,8 +117,8 @@ export default function Plans({ addToast }) {
             </thead>
             <tbody>
               {planList.map((p, i) => {
-                const mrr   = (p.price || 0) * (p.subscribers || 0);
-                const pct   = totalMrr > 0 ? ((mrr / totalMrr) * 100).toFixed(1) : "0.0";
+                const mrr = (p.price || 0) * (p.subscribers || 0);
+                const pct = totalMrr > 0 ? ((mrr / totalMrr) * 100).toFixed(1) : "0.0";
                 const color = PLAN_COLORS[i % PLAN_COLORS.length];
                 return (
                   <tr key={p._id}>
@@ -128,7 +142,7 @@ export default function Plans({ addToast }) {
         </div>
       )}
 
-      {showModal && (
+      {isAdmin && showModal && (
         <Modal title="New Plan" subtitle="Define a new billing tier" onClose={() => setShowModal(false)}>
           <div className="form-group">
             <label className="form-label">Plan Name</label>
@@ -150,8 +164,10 @@ export default function Plans({ addToast }) {
           </div>
           <div className="form-group">
             <label className="form-label">Features (one per line)</label>
-            <textarea className="form-input" rows={4} placeholder={"25 seats\n100K API calls/mo\nPriority support"}
-              value={form.features} onChange={(e) => setForm((p) => ({ ...p, features: e.target.value }))}
+            <textarea className="form-input" rows={4}
+              placeholder={"25 seats\n100K API calls/mo\nPriority support"}
+              value={form.features}
+              onChange={(e) => setForm((p) => ({ ...p, features: e.target.value }))}
               style={{ resize: "vertical" }} />
           </div>
           <ModalActions>

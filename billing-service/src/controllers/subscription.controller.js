@@ -1,10 +1,10 @@
 const Subscription    = require("../models/subscription.model");
+const Payment         = require("../models/payment.model");
 const Plan            = require("../models/plan.model");
 const config          = require("../config");
 const logger          = require("../utils/logger");
 const { publishEvent }= require("../utils/eventPublisher");
 
-// ── helpers ───────────────────────────────────────────────────────────────────
 const addDays   = (date, days) => new Date(date.getTime() + days * 86400000);
 const addMonths = (date, n)    => { const d = new Date(date); d.setMonth(d.getMonth() + n); return d; };
 
@@ -18,16 +18,11 @@ const listSubscriptions = async (req, res, next) => {
       { customer: { $regex: search, $options: "i" } },
       { email:    { $regex: search, $options: "i" } },
     ];
-
     const [data, total] = await Promise.all([
-      Subscription.find(query)
-        .sort({ createdAt: -1 })
-        .skip((+page - 1) * +limit)
-        .limit(+limit)
-        .lean(),
+      Subscription.find(query).sort({ createdAt: -1 })
+        .skip((+page - 1) * +limit).limit(+limit).lean(),
       Subscription.countDocuments(query),
     ]);
-
     return res.status(200).json({ success: true, data: { data, total, page: +page, limit: +limit } });
   } catch (err) { next(err); }
 };
@@ -37,7 +32,10 @@ const getSubscription = async (req, res, next) => {
   try {
     const sub = await Subscription.findById(req.params.id).populate("planId");
     if (!sub) return res.status(404).json({ success: false, error: { message: "Subscription not found" } });
-    return res.status(200).json({ success: true, data: sub });
+    // Include recent payments for this subscription
+    const payments = await Payment.find({ subscriptionId: sub._id })
+      .sort({ createdAt: -1 }).limit(10).lean();
+    return res.status(200).json({ success: true, data: { ...sub.toObject(), payments } });
   } catch (err) { next(err); }
 };
 
@@ -51,10 +49,10 @@ const createSubscription = async (req, res, next) => {
       return res.status(404).json({ success: false, error: { message: "Plan not found or inactive" } });
     }
 
-    const now          = new Date();
-    const trialLength  = trialDays ?? config.trial.defaultDays;
-    const trialEndsAt  = trialLength > 0 ? addDays(now, trialLength) : null;
-    const periodEnd    = addMonths(now, 1);
+    const now         = new Date();
+    const trialLength = trialDays !== undefined ? parseInt(trialDays, 10) : config.trial.defaultDays;
+    const trialEndsAt = trialLength > 0 ? addDays(now, trialLength) : null;
+    const periodEnd   = addMonths(now, 1);
 
     const sub = await Subscription.create({
       customerId:         req.user.id,
@@ -63,7 +61,7 @@ const createSubscription = async (req, res, next) => {
       planId:             plan._id,
       planName:           plan.name,
       amount:             plan.price,
-      currency:           plan.currency,
+      currency:           plan.currency || "USD",
       status:             trialEndsAt ? "trialing" : "active",
       currentPeriodStart: now,
       currentPeriodEnd:   periodEnd,
@@ -71,8 +69,47 @@ const createSubscription = async (req, res, next) => {
       trialEndsAt,
     });
 
-    logger.info("Subscription created", { subId: sub._id, plan: plan.name });
+    logger.info("Subscription created", { subId: sub._id, plan: plan.name, trialDays: trialLength });
     await publishEvent("subscription.created", { sub_id: sub._id, plan: plan.name, customer });
+
+    // ── Create & immediately attempt a payment if no trial ────────────────────
+    if (!trialEndsAt) {
+      const payment = await Payment.create({
+        subscriptionId: sub._id,
+        customerId:     req.user.id,
+        customer,
+        amount:         plan.price,
+        currency:       plan.currency || "USD",
+        status:         "processing",
+        method:         "card_visa",
+        maxRetries:     config.retry.maxAttempts,
+      });
+
+      // Run charge asynchronously so the subscription creation response is fast
+      setImmediate(async () => {
+        try {
+          const { attemptCharge } = require("./payment.controller");
+          await attemptCharge(payment);
+          logger.info("Initial charge completed", { subId: sub._id, paymentId: payment._id });
+        } catch (err) {
+          logger.error("Initial charge failed", { subId: sub._id, error: err.message });
+        }
+      });
+    } else {
+      // On trial — create a future payment record so it appears in the payments list
+      await Payment.create({
+        subscriptionId: sub._id,
+        customerId:     req.user.id,
+        customer,
+        amount:         plan.price,
+        currency:       plan.currency || "USD",
+        status:         "processing",
+        method:         "card_visa",
+        maxRetries:     config.retry.maxAttempts,
+        nextRetryAt:    trialEndsAt, // charge when trial ends
+      });
+      logger.info("Trial payment scheduled", { subId: sub._id, chargeAt: trialEndsAt });
+    }
 
     return res.status(201).json({ success: true, data: sub });
   } catch (err) { next(err); }
@@ -86,32 +123,26 @@ const cancelSubscription = async (req, res, next) => {
     if (sub.status === "canceled") {
       return res.status(400).json({ success: false, error: { message: "Subscription already canceled" } });
     }
-
     const { reason = "user_request", cancelImmediately = false } = req.body;
     const now = new Date();
-
     sub.status       = "canceled";
     sub.canceledAt   = now;
     sub.cancelReason = reason;
     sub.endsAt       = cancelImmediately ? now : sub.currentPeriodEnd;
     await sub.save();
-
     logger.info("Subscription canceled", { subId: sub._id });
     await publishEvent("subscription.canceled", { sub_id: sub._id, reason });
-
     return res.status(200).json({ success: true, data: sub });
   } catch (err) { next(err); }
 };
 
-// GET /api/billing/stats  (dashboard stats)
+// GET /api/billing/stats
 const getStats = async (req, res, next) => {
   try {
     const now        = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const prevStart  = new Date(now.getFullYear(), now.getMonth() - 1, 1);
     const prevEnd    = new Date(now.getFullYear(), now.getMonth(), 0);
-
-    const Payment = require("../models/payment.model");
 
     const [
       activeSubs, prevActiveSubs,
@@ -130,11 +161,8 @@ const getStats = async (req, res, next) => {
     const prevMrr = prevPayments.reduce((s, p) => s + p.amount, 0);
     const totalNow  = payments.length + failedNow  || 1;
     const totalPrev = prevPayments.length + failedPrev || 1;
+    const pct = (curr, prev) => prev === 0 ? 0 : +((((curr - prev) / prev) * 100).toFixed(1));
 
-    const pct = (curr, prev) =>
-      prev === 0 ? 0 : +((((curr - prev) / prev) * 100).toFixed(1));
-
-    // Last 6 months MRR history
     const history = await Promise.all(
       Array.from({ length: 6 }, (_, i) => {
         const d = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
@@ -153,7 +181,7 @@ const getStats = async (req, res, next) => {
       success: true,
       data: {
         mrr,
-        mrrChange:           pct(mrr, prevMrr),
+        mrrChange:          pct(mrr, prevMrr),
         activeSubscriptions: activeSubs,
         subChange:           pct(activeSubs, prevActiveSubs),
         paymentSuccessRate:  +((payments.length / totalNow) * 100).toFixed(1),

@@ -15,7 +15,7 @@ export default function Payments({ addToast }) {
 
   const { data, loading, error, refetch } = useApi(
     useCallback(() => {
-      const params = {};
+      const params = { limit: 100 }; // load enough to compute stats client-side
       if (statusFilter !== "all") params.status = statusFilter;
       return billingApi.listPayments(params);
     }, [statusFilter])
@@ -28,38 +28,38 @@ export default function Payments({ addToast }) {
   // Client-side search filter
   const payments = allPayments.filter((p) => {
     if (!search) return true;
-    const id = p._id || "";
+    const id = (p._id || "").toLowerCase();
     return (
       (p.customer || "").toLowerCase().includes(search.toLowerCase()) ||
-      id.toLowerCase().includes(search.toLowerCase())
+      id.includes(search.toLowerCase())
     );
   });
 
+  // Stats from all loaded payments (before search filter)
   const succeeded = allPayments.filter((p) => p.status === "succeeded");
   const failed    = allPayments.filter((p) => p.status === "failed");
   const refunded  = allPayments.filter((p) => p.status === "refunded");
+  const processing = allPayments.filter((p) => p.status === "processing");
 
   const handleRetry = async (payment) => {
-    // Guard against missing _id which causes /payments//retry
-    if (!payment._id) {
-      addToast("Payment ID missing — cannot retry", "error");
-      return;
-    }
+    if (!payment._id) { addToast("Payment ID missing", "error"); return; }
     try {
       await retryPay(payment._id);
-      addToast("Retry initiated", "success");
+      addToast("Retry initiated — payment is processing", "success");
       refetch();
-    } catch (err) {
-      addToast(err.message, "error");
-    }
+    } catch (err) { addToast(err.message, "error"); }
   };
 
   return (
     <div>
+      {/* Stats row */}
       <div className="payments__stats">
-        <StatCard label="Total Collected"
+        <StatCard label="Collected"
           value={fmt(succeeded.reduce((s, p) => s + (p.amount || 0), 0))}
           change={0} icon="💳" color="green" />
+        <StatCard label="Processing"
+          value={processing.length}
+          change={0} icon="⏳" color="blue" />
         <StatCard label="Failed"
           value={failed.length}
           change={0} icon="❌" color="red" />
@@ -74,8 +74,8 @@ export default function Payments({ addToast }) {
           onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="all">All Status</option>
           <option value="succeeded">Succeeded</option>
-          <option value="failed">Failed</option>
           <option value="processing">Processing</option>
+          <option value="failed">Failed</option>
           <option value="refunded">Refunded</option>
         </select>
         <Button variant="ghost" onClick={refetch}>↻ Refresh</Button>
@@ -94,16 +94,28 @@ export default function Payments({ addToast }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={8}><div className="table-loading">Loading…</div></td></tr>
+                <tr><td colSpan={8}><div className="table-loading">Loading payments…</div></td></tr>
               ) : payments.length === 0 ? (
-                <tr><td colSpan={8}><EmptyState icon="💳" text="No payments found" /></td></tr>
+                <tr><td colSpan={8}>
+                  <EmptyState icon="💳"
+                    text={allPayments.length === 0
+                      ? "No payments yet — create a subscription to generate one"
+                      : "No payments match your filter"} />
+                </td></tr>
               ) : payments.map((p) => (
                 <tr key={p._id}>
-                  <td><span className="mono text-accent">{(p._id || "").slice(-8)}</span></td>
+                  <td>
+                    <div className="mono text-accent" style={{ fontSize: 11 }}>
+                      {(p._id || "").slice(-8)}
+                    </div>
+                    {p.simulatorRef && (
+                      <div className="mono-sm">{p.simulatorRef.slice(-6)}</div>
+                    )}
+                  </td>
                   <td><span className="fw-bold">{p.customer}</span></td>
                   <td>
                     <span className="mono"
-                      style={{ color: p.status === "failed" ? "var(--red)" : "var(--green)" }}>
+                      style={{ color: p.status === "failed" ? "var(--red)" : p.status === "succeeded" ? "var(--green)" : "var(--text2)" }}>
                       {fmt(p.amount || 0)}
                     </span>
                   </td>
@@ -111,17 +123,26 @@ export default function Payments({ addToast }) {
                   <td className="mono">{methodLabel(p.method)}</td>
                   <td>
                     {(p.retries || 0) > 0
-                      ? <span className="payments__retry-count">↻ {p.retries}</span>
+                      ? <span className="payments__retry-count">↻ {p.retries}/{p.maxRetries}</span>
                       : <span className="text-muted mono">—</span>}
                   </td>
-                  <td className="mono text-muted">{fmtDate(p.createdAt || p.date)}</td>
+                  <td className="mono text-muted" style={{ fontSize: 11 }}>
+                    {fmtDate(p.createdAt || p.date)}
+                    {p.nextRetryAt && p.status !== "succeeded" && (
+                      <div style={{ color: "var(--yellow)", fontSize: 10, marginTop: 2 }}>
+                        retry: {fmtDate(p.nextRetryAt)}
+                      </div>
+                    )}
+                  </td>
                   <td>
-                    {p.status === "failed" && p._id && (
-                      <Button size="sm" variant="primary"
-                        disabled={retrying}
+                    {p.status === "failed" && p._id && p.retries < p.maxRetries && (
+                      <Button size="sm" variant="primary" disabled={retrying}
                         onClick={() => handleRetry(p)}>
                         ↻ Retry
                       </Button>
+                    )}
+                    {p.status === "processing" && (
+                      <span style={{ fontSize: 11, color: "var(--text3)" }}>processing…</span>
                     )}
                   </td>
                 </tr>
@@ -129,11 +150,14 @@ export default function Payments({ addToast }) {
             </tbody>
           </table>
         </div>
-        {data?.total > 0 && (
-          <div className="table-footer">
-            Showing {payments.length} of {data.total}
-          </div>
-        )}
+        <div className="table-footer">
+          {loading ? "Loading…" : `${payments.length} of ${data?.total || 0} payments`}
+          {processing.length > 0 && (
+            <span style={{ marginLeft: 12, color: "var(--yellow)", fontSize: 11 }}>
+              {processing.length} processing — refresh to update
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -13,7 +13,12 @@ export default function Subscriptions({ addToast }) {
   const [search,       setSearch]       = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [showModal,    setShowModal]    = useState(false);
-  const [form, setForm] = useState({ customer: "", email: "", planId: "" });
+  const [form, setForm] = useState({
+    customer:  "",
+    email:     "",
+    planId:    "",
+    trialDays: "0",  // 0 = bill immediately, >0 = trial period
+  });
 
   const { data, loading, error, refetch } = useApi(
     useCallback(() => {
@@ -25,7 +30,6 @@ export default function Subscriptions({ addToast }) {
   );
 
   const { data: plans, loading: plansLoading } = useApi(billingApi.listPlans);
-
   const { mutate: createSub, loading: creating } = useMutation(billingApi.createSubscription);
   const { mutate: cancelSub } = useMutation(billingApi.cancelSubscription);
 
@@ -36,10 +40,21 @@ export default function Subscriptions({ addToast }) {
       addToast("Please fill all fields", "error"); return;
     }
     try {
-      await createSub(form);
-      addToast(`Subscription created for ${form.customer}`, "success");
+      await createSub({
+        customer:  form.customer,
+        email:     form.email,
+        planId:    form.planId,
+        trialDays: parseInt(form.trialDays, 10) || 0,
+      });
+      const trialDays = parseInt(form.trialDays, 10) || 0;
+      addToast(
+        trialDays > 0
+          ? `Subscription created for ${form.customer} — ${trialDays}-day trial starts now`
+          : `Subscription created for ${form.customer} — payment processing now`,
+        "success"
+      );
       setShowModal(false);
-      setForm({ customer: "", email: "", planId: "" });
+      setForm({ customer: "", email: "", planId: "", trialDays: "0" });
       refetch();
     } catch (err) { addToast(err.message, "error"); }
   };
@@ -100,7 +115,7 @@ export default function Subscriptions({ addToast }) {
                   <td className="mono">{fmtDate(s.nextBillingDate)}</td>
                   <td className="mono text-muted">{fmtDate(s.createdAt)}</td>
                   <td>
-                    {s.status === "active" && (
+                    {(s.status === "active" || s.status === "trialing" || s.status === "past_due") && (
                       <Button size="sm" variant="danger" onClick={() => handleCancel(s)}>
                         Cancel
                       </Button>
@@ -139,6 +154,16 @@ export default function Subscriptions({ addToast }) {
               {!plansLoading && (plans || []).map((p) => (
                 <option key={p._id} value={p._id}>{p.name} – ${p.price}/mo</option>
               ))}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Trial Period</label>
+            <select className="form-input filter-select" value={form.trialDays}
+              onChange={(e) => setForm((p) => ({ ...p, trialDays: e.target.value }))}>
+              <option value="0">No trial — bill immediately</option>
+              <option value="7">7-day trial</option>
+              <option value="14">14-day trial</option>
+              <option value="30">30-day trial</option>
             </select>
           </div>
           <ModalActions>

@@ -275,3 +275,14 @@ tbody td {
   gap: 16px;
   margin-top: 20px;
 }
+
+/* ── Role notice ── */
+.role-notice {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+  border: 1px solid rgba(251,191,36,0.25);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
