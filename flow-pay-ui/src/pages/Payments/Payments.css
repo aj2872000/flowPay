@@ -1,0 +1,12 @@
+.payments__stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.payments__retry-count {
+  color: var(--yellow);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}

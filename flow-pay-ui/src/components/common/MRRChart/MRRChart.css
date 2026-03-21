@@ -1,0 +1,81 @@
+.mrr-chart__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.mrr-chart__label {
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.mrr-chart__value {
+  font-family: var(--font-head);
+  font-size: 26px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.mrr-chart__bars {
+  height: 180px;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.mrr-chart__bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  justify-content: flex-end;
+}
+
+.mrr-chart__bar {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  background: linear-gradient(180deg, var(--accent) 0%, rgba(79,142,247,0.4) 100%);
+  min-height: 4px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.mrr-chart__bar:hover { opacity: 0.8; }
+
+.mrr-chart__bar--active {
+  background: linear-gradient(180deg, var(--green) 0%, rgba(34,211,163,0.4) 100%);
+}
+
+.mrr-chart__month {
+  font-size: 11px;
+  color: var(--text3);
+  font-family: var(--font-mono);
+}
+
+.mrr-chart__change {
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-family: var(--font-mono);
+}
+
+.mrr-chart__change--up   { background: var(--green-bg); color: var(--green); }
+.mrr-chart__change--down { background: var(--red-bg);   color: var(--red);   }
+
+.mrr-chart__empty {
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text3);
+  font-size: 13px;
+}

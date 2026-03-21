@@ -1,0 +1,72 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: 0.3px;
+  text-transform: capitalize;
+}
+
+.badge__dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Status variants */
+.badge--active,
+.badge--succeeded,
+.badge--delivered {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.badge--active .badge__dot,
+.badge--succeeded .badge__dot,
+.badge--delivered .badge__dot {
+  background: var(--green);
+}
+
+.badge--failed,
+.badge--failing {
+  background: var(--red-bg);
+  color: var(--red);
+}
+.badge--failed .badge__dot,
+.badge--failing .badge__dot {
+  background: var(--red);
+}
+
+.badge--trialing,
+.badge--processing {
+  background: var(--yellow-bg);
+  color: var(--yellow);
+}
+.badge--trialing .badge__dot,
+.badge--processing .badge__dot {
+  background: var(--yellow);
+}
+
+.badge--past_due {
+  background: rgba(245, 101, 101, 0.15);
+  color: #fc8181;
+}
+.badge--past_due .badge__dot {
+  background: #fc8181;
+}
+
+.badge--canceled,
+.badge--disabled,
+.badge--refunded {
+  background: var(--surface2);
+  color: var(--text3);
+}
+.badge--canceled .badge__dot,
+.badge--disabled .badge__dot,
+.badge--refunded .badge__dot {
+  background: var(--text3);
+}

@@ -1,0 +1,135 @@
+.sim__header {
+  margin-bottom: 24px;
+}
+
+.sim__title {
+  font-family: var(--font-head);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.sim__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.sim__scenarios {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sim__scenario {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  transition: all 0.12s;
+  font-size: 13px;
+}
+
+.sim__scenario--active {
+  background: var(--surface2);
+  border-color: var(--border2);
+}
+
+.sim__pulse {
+  animation: pulse 1s infinite;
+}
+
+.sim__empty {
+  text-align: center;
+  padding: 48px 20px;
+}
+
+.sim__empty-icon,
+.sim__loading-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+.sim__loading-icon {
+  animation: pulse 1s infinite;
+}
+
+.sim__result-banner {
+  padding: 16px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 20px;
+  border-left: 3px solid;
+}
+
+.sim__result-banner--succeeded {
+  background: var(--green-bg);
+  border-color: var(--green);
+}
+
+.sim__result-banner--failed {
+  background: var(--red-bg);
+  border-color: var(--red);
+}
+
+.sim__result-title {
+  font-family: var(--font-head);
+  font-size: 17px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.sim__result-banner--succeeded .sim__result-title { color: var(--green); }
+.sim__result-banner--failed    .sim__result-title { color: var(--red); }
+
+.sim__result-msg {
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.sim__result-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.sim__result-row:last-of-type {
+  border-bottom: none;
+}
+
+.sim__retry-btn {
+  margin-top: 16px;
+}
+
+.sim__retryable-tag {
+  margin-left: auto;
+  font-size: 9px;
+  font-family: var(--font-mono);
+  color: var(--yellow);
+  background: var(--yellow-bg);
+  border-radius: 3px;
+  padding: 1px 5px;
+  letter-spacing: 0.3px;
+}
+
+.sim__history {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.sim__history-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.sim__history-row:last-child { border-bottom: none; }
