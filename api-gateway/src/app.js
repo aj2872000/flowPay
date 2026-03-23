@@ -76,6 +76,13 @@ app.use((req, res, next) => {
 app.use(requestId);
 app.use(httpLogger);
 
+// ─── Body parsing ────────────────────────────────────────────────────────────
+// The gateway needs to parse the body so onProxyReq can restream it to the
+// downstream service. Without this req.body is undefined and the downstream
+// receives an empty body — causing validation failures and 500 errors.
+app.use(express.json({ limit: "1mb", strict: false }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
+
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 app.use(globalLimiter);
 
