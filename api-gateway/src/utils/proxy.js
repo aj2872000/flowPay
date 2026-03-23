@@ -1,66 +1,76 @@
-const axios = require("axios");
+const { createProxyMiddleware } = require("http-proxy-middleware");
+const https = require("https");
+const http  = require("http");
+const logger = require("../utils/logger");
+
+const httpAgent  = new http.Agent({  keepAlive: true, maxSockets: 50 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50 });
 
 const createServiceProxy = (target, pathRewrite, serviceName = "service") => {
-  return async (req, res) => {
-    try {
-      let pathname = req.path || "/";
-      if (typeof pathRewrite === "function") {
-        pathname = pathRewrite(pathname, req);
-      }
-      const qs  = Object.keys(req.query || {}).length
-        ? "?" + new URLSearchParams(req.query).toString()
-        : "";
-      const url = `${target.replace(/\/$/, "")}${pathname}${qs}`;
+  const isHttps = target.startsWith("https");
 
-      const headers = { "content-type": "application/json" };
-      ["authorization","x-request-id","x-user-id","x-user-email","x-user-role","x-internal-service"]
-        .forEach((h) => { if (req.headers[h]) headers[h] = req.headers[h]; });
+  return createProxyMiddleware({
+    target,
+    changeOrigin: true,
+    secure:       isHttps,
+    agent:        isHttps ? httpsAgent : httpAgent,
 
-      const isBodyMethod = !["GET","HEAD"].includes(req.method.toUpperCase());
-      const hasBody = isBodyMethod && req.body &&
-                      typeof req.body === "object" &&
-                      Object.keys(req.body).length > 0;
+    pathRewrite: typeof pathRewrite === "function"
+      ? (path, req) => pathRewrite(path, req)
+      : pathRewrite,
 
-      console.log(`[PROXY] ${req.method} → ${url} hasBody=${hasBody} target=${target}`);
-
-      const response = await axios({
-        method:         req.method,
-        url,
-        headers,
-        data:           hasBody ? req.body : undefined,
-        timeout:        25000,
-        validateStatus: () => true,
-        decompress:     true,
-        maxRedirects:   0,
-      });
-
-      console.log(`[PROXY] ← ${serviceName} ${response.status} from ${url}`);
-      if (response.status >= 400) {
-        console.log(`[PROXY] error body: ${JSON.stringify(response.data).slice(0, 500)}`);
+    // ── hpm v2 flat event hooks ───────────────────────────────────────────────
+    onProxyReq(proxyReq, req) {
+      // Restream body that express.json() already consumed from the raw stream
+      // Only for methods that carry a body, and only when body is non-empty
+      if (
+        req.body &&
+        typeof req.body === "object" &&
+        Object.keys(req.body).length > 0 &&
+        req.method !== "GET" &&
+        req.method !== "HEAD"
+      ) {
+        const body = JSON.stringify(req.body);
+        proxyReq.setHeader("Content-Type",   "application/json");
+        proxyReq.setHeader("Content-Length", Buffer.byteLength(body));
+        proxyReq.write(body);
+        // DO NOT call proxyReq.end() — hpm calls it after onProxyReq returns
       }
 
-      const skip = new Set(["transfer-encoding","connection","keep-alive","content-encoding","content-length"]);
-      Object.entries(response.headers).forEach(([k, v]) => {
-        if (!skip.has(k.toLowerCase())) res.setHeader(k, v);
+      logger.debug(`[proxy] → ${serviceName}`, {
+        method: req.method,
+        from:   req.originalUrl,
+        to:     proxyReq.path,
       });
+    },
 
-      return res.status(response.status).json(response.data);
+    onProxyRes(proxyRes, req) {
+      logger.debug(`[proxy] ← ${serviceName}`, {
+        status: proxyRes.statusCode,
+        path:   req.originalUrl,
+      });
+    },
 
-    } catch (err) {
-      console.error(`[PROXY] ${serviceName} FAILED: ${err.message} code=${err.code}`);
-      console.error(`[PROXY] target was: ${target}`);
-      console.error(`[PROXY] stack: ${err.stack}`);
+    onError(err, req, res) {
+      logger.error(`[proxy] ${serviceName} error`, {
+        error: err.message, code: err.code, target, path: req.originalUrl,
+      });
       if (res.headersSent) return;
       const status =
-        err.code === "ECONNREFUSED"                              ? 503 :
-        err.code === "ECONNRESET"                                ? 502 :
-        err.code === "ETIMEDOUT" || err.code === "ECONNABORTED"  ? 504 : 502;
+        err.code === "ECONNREFUSED" ? 503 :
+        err.code === "ECONNRESET"   ? 502 :
+        err.code === "ETIMEDOUT"    ? 504 : 502;
       res.status(status).json({
         success: false,
-        error: { message: `${serviceName} error: ${err.message}` },
+        error: {
+          message:
+            err.code === "ECONNREFUSED" ? `${serviceName} is not running` :
+            err.code === "ETIMEDOUT"    ? `${serviceName} timed out` :
+            `${serviceName} is unavailable: ${err.message}`,
+        },
       });
-    }
-  };
+    },
+  });
 };
 
 module.exports = { createServiceProxy };

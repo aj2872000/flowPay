@@ -1,37 +1,24 @@
-// Simple logger that writes plain text to stdout/stderr.
-// Railway captures process.stdout reliably — Winston with JSON format
-// sometimes doesn't appear in Railway's log viewer.
+const { createLogger, format, transports } = require("winston");
+const config = require("../config");
 
-const isProd = process.env.NODE_ENV === "production";
-
-const ts = () => new Date().toISOString();
-
-const fmt = (level, message, meta) => {
-  const base = `${ts()} [${level.toUpperCase()}] ${message}`;
-  if (!meta || Object.keys(meta).length === 0) return base;
-  try {
-    return `${base} ${JSON.stringify(meta)}`;
-  } catch {
-    return base;
-  }
-};
-
-const logger = {
-  debug: (message, meta = {}) => {
-    process.stdout.write(fmt("debug", message, meta) + "\n");
-  },
-  info: (message, meta = {}) => {
-    process.stdout.write(fmt("info", message, meta) + "\n");
-  },
-  warn: (message, meta = {}) => {
-    process.stdout.write(fmt("warn", message, meta) + "\n");
-  },
-  error: (message, meta = {}) => {
-    process.stderr.write(fmt("error", message, meta) + "\n");
-  },
-  http: (message, meta = {}) => {
-    process.stdout.write(fmt("http", message, meta) + "\n");
-  },
-};
+const logger = createLogger({
+  level: config.log.level,
+  format: format.combine(
+    format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    format.errors({ stack: true }),
+    config.nodeEnv === "production"
+      ? format.json()
+      : format.combine(
+          format.colorize(),
+          format.printf(({ timestamp, level, message, ...meta }) => {
+            const metaStr = Object.keys(meta).length
+              ? "\n" + JSON.stringify(meta, null, 2)
+              : "";
+            return `${timestamp} [${level}] ${message}${metaStr}`;
+          })
+        )
+  ),
+  transports: [new transports.Console()],
+});
 
 module.exports = logger;
