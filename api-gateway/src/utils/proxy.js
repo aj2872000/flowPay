@@ -3,22 +3,17 @@ const http  = require("http");
 const https = require("https");
 const logger = require("../utils/logger");
 
-const httpAgent = new http.Agent({
-  keepAlive: true, keepAliveMsecs: 60_000, maxSockets: 50,
-});
-const httpsAgent = new https.Agent({
-  keepAlive: true, keepAliveMsecs: 60_000, maxSockets: 50,
-});
+const httpAgent  = new http.Agent({  keepAlive: true, maxSockets: 50 });
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 50 });
 
 const createServiceProxy = (target, pathRewrite, serviceName = "service") => {
-  // Auto-select agent based on target protocol
-  // Railway/production services use https://, local dev uses http://
-  const agent = target.startsWith("https") ? httpsAgent : httpAgent;
+  const isHttps = target.startsWith("https");
+  const agent   = isHttps ? httpsAgent : httpAgent;
 
   return createProxyMiddleware({
     target,
     changeOrigin: true,
-    secure:       target.startsWith("https"), // verify SSL for https targets
+    secure:       isHttps,
     agent,
 
     pathRewrite: typeof pathRewrite === "function"
@@ -26,22 +21,29 @@ const createServiceProxy = (target, pathRewrite, serviceName = "service") => {
       : pathRewrite,
 
     onProxyReq(proxyReq, req) {
-      if (req.body && Object.keys(req.body).length > 0) {
+      // Body restream — only when body exists and was parsed by express.json()
+      // Guard against undefined/null/empty body to prevent crashes
+      if (
+        req.body !== undefined &&
+        req.body !== null &&
+        typeof req.body === "object" &&
+        Object.keys(req.body).length > 0
+      ) {
         const bodyStr = JSON.stringify(req.body);
         proxyReq.setHeader("Content-Type",   "application/json");
         proxyReq.setHeader("Content-Length", Buffer.byteLength(bodyStr));
         proxyReq.write(bodyStr);
+        proxyReq.end();
       }
+
       logger.debug(`[proxy] → ${serviceName}`, {
-        method: req.method, from: req.originalUrl,
-        to: proxyReq.path, requestId: req.requestId,
+        method: req.method, from: req.originalUrl, to: proxyReq.path,
       });
     },
 
     onProxyRes(proxyRes, req) {
       logger.debug(`[proxy] ← ${serviceName}`, {
         status: proxyRes.statusCode, path: req.originalUrl,
-        requestId: req.requestId,
       });
     },
 
@@ -60,7 +62,7 @@ const createServiceProxy = (target, pathRewrite, serviceName = "service") => {
           message:
             err.code === "ECONNREFUSED" ? `${serviceName} is not running` :
             err.code === "ETIMEDOUT"    ? `${serviceName} timed out` :
-            `${serviceName} is unavailable`,
+            `${serviceName} is unavailable: ${err.message}`,
         },
       });
     },

@@ -16,59 +16,65 @@ const simulatorRoutes = require("./routes/simulator.routes");
 
 const app = express();
 
-// ─── Security headers ────────────────────────────────────────────────────────
+// ─── Trust Railway's reverse proxy ───────────────────────────────────────────
+// Railway sits behind a load balancer. Without this, req.ip is always the
+// internal proxy IP, which breaks rate limiting and IP-based logic.
+app.set("trust proxy", 1);
+
+// ─── Security ─────────────────────────────────────────────────────────────────
 app.use(helmet({
   crossOriginResourcePolicy: false,
   crossOriginOpenerPolicy:   false,
 }));
 
-// ─── Node v20 keep-alive fix ─────────────────────────────────────────────────
+// ─── CORS — must be first, before every other middleware ─────────────────────
+const corsOptions = {
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);
+    if (config.nodeEnv !== "production") return cb(null, true);
+
+    const rawOrigin = config.cors.origin || "";
+    const allowList = rawOrigin.split(",").map((o) => o.trim()).filter(Boolean);
+
+    if (
+      origin.endsWith(".vercel.app") ||
+      origin.includes("localhost") ||
+      origin.includes("127.0.0.1") ||
+      allowList.includes(origin)
+    ) return cb(null, true);
+
+    cb(new Error(`CORS: "${origin}" not allowed`));
+  },
+  credentials:          true,
+  methods:              ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders:       ["Content-Type", "Authorization", "x-request-id"],
+  exposedHeaders:       ["x-request-id", "RateLimit-Limit", "RateLimit-Remaining"],
+  optionsSuccessStatus: 200,
+  maxAge:               86400,
+};
+
+app.use(cors(corsOptions));
+
+// Short-circuit ALL OPTIONS preflights — must be above every route
+app.options("*", (req, res) => {
+  res.set({
+    "Access-Control-Allow-Origin":  req.headers.origin || "*",
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type,Authorization,x-request-id",
+    "Access-Control-Max-Age":       "86400",
+  });
+  res.status(200).end();
+});
+
+// ─── Keep-alive ───────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
   res.setHeader("Connection", "keep-alive");
   next();
 });
 
-// ─── CORS ────────────────────────────────────────────────────────────────────
-const corsOptions = {
-  origin(origin, cb) {
-    // No origin = Postman / curl / server-to-server — always allow
-    if (!origin) return cb(null, true);
-    // Development: allow everything
-    if (config.nodeEnv === "development") return cb(null, true);
-    // Production: check allowlist
-    const allowed = [
-      ...(Array.isArray(config.cors.origin)
-        ? config.cors.origin
-        : [config.cors.origin]),
-      "http://localhost:3000",
-      "http://127.0.0.1:3000",
-    ];
-    return allowed.includes(origin) ? cb(null, true) : cb(new Error("CORS blocked"));
-  },
-  credentials:      true,
-  methods:          ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders:   ["Content-Type", "Authorization", "x-request-id"],
-  exposedHeaders:   ["x-request-id", "RateLimit-Limit", "RateLimit-Remaining"],
-  optionsSuccessStatus: 200,
-};
-
-app.use(cors(corsOptions));
-// Handle preflight OPTIONS for every route
-app.options("*", cors(corsOptions));
-
 // ─── Request enrichment ───────────────────────────────────────────────────────
 app.use(requestId);
 app.use(httpLogger);
-
-// ─── IMPORTANT: NO express.json() here ───────────────────────────────────────
-// The gateway is a pure reverse proxy. Parsing the body with express.json()
-// consumes the readable stream. When http-proxy-middleware then tries to pipe
-// the body to the downstream service it gets an empty stream, causing the
-// downstream to hang waiting for data → timeout / socket hang-up.
-//
-// Body parsing happens inside each downstream service, not here.
-// The only exception: routes that need to read the body BEFORE proxying
-// (e.g. auth middleware reading JWT) use req.headers only, not req.body.
 
 // ─── Rate limiting ────────────────────────────────────────────────────────────
 app.use(globalLimiter);
@@ -81,7 +87,7 @@ app.use("/api/billing",   billingRoutes);
 app.use("/api/events",    eventRoutes);
 app.use("/api/simulator", simulatorRoutes);
 
-// ─── Fallback & error handling ────────────────────────────────────────────────
+// ─── Fallback & errors ────────────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
