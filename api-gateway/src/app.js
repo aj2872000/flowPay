@@ -16,33 +16,39 @@ const simulatorRoutes = require("./routes/simulator.routes");
 
 const app = express();
 
-// ─── Trust Railway's reverse proxy ───────────────────────────────────────────
-// Railway sits behind a load balancer. Without this, req.ip is always the
-// internal proxy IP, which breaks rate limiting and IP-based logic.
 app.set("trust proxy", 1);
 
-// ─── Security ─────────────────────────────────────────────────────────────────
-app.use(helmet({
-  crossOriginResourcePolicy: false,
-  crossOriginOpenerPolicy:   false,
-}));
+// ─── RAW DEBUG — prints every request before anything else ───────────────────
+// Uses console.log directly — guaranteed to appear in Railway logs
+app.use((req, res, next) => {
+  console.log(`[REQUEST] ${req.method} ${req.originalUrl} origin=${req.headers.origin || "none"}`);
+  const origJson = res.json.bind(res);
+  res.json = (body) => {
+    console.log(`[RESPONSE] ${req.method} ${req.originalUrl} status=${res.statusCode}`, JSON.stringify(body).slice(0, 300));
+    return origJson(body);
+  };
+  next();
+});
 
-// ─── CORS — must be first, before every other middleware ─────────────────────
+// ─── Security ─────────────────────────────────────────────────────────────────
+app.use(helmet({ crossOriginResourcePolicy: false, crossOriginOpenerPolicy: false }));
+
+// ─── CORS ─────────────────────────────────────────────────────────────────────
 const corsOptions = {
   origin(origin, cb) {
+    console.log(`[CORS] origin=${origin || "none"} env=${config.nodeEnv}`);
     if (!origin) return cb(null, true);
     if (config.nodeEnv !== "production") return cb(null, true);
-
     const rawOrigin = config.cors.origin || "";
+    console.log(`[CORS] CORS_ORIGIN env value="${rawOrigin}"`);
     const allowList = rawOrigin.split(",").map((o) => o.trim()).filter(Boolean);
-
     if (
       origin.endsWith(".vercel.app") ||
       origin.includes("localhost") ||
       origin.includes("127.0.0.1") ||
       allowList.includes(origin)
     ) return cb(null, true);
-
+    console.log(`[CORS] BLOCKED origin=${origin}`);
     cb(new Error(`CORS: "${origin}" not allowed`));
   },
   credentials:          true,
@@ -55,8 +61,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Short-circuit ALL OPTIONS preflights — must be above every route
+// Short-circuit OPTIONS preflights
 app.options("*", (req, res) => {
+  console.log(`[OPTIONS] preflight for ${req.path} from ${req.headers.origin}`);
   res.set({
     "Access-Control-Allow-Origin":  req.headers.origin || "*",
     "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
@@ -66,24 +73,23 @@ app.options("*", (req, res) => {
   res.status(200).end();
 });
 
-// ─── Keep-alive ───────────────────────────────────────────────────────────────
-app.use((req, res, next) => {
-  res.setHeader("Connection", "keep-alive");
-  next();
-});
+app.use((req, res, next) => { res.setHeader("Connection", "keep-alive"); next(); });
 
-// ─── Request enrichment ───────────────────────────────────────────────────────
 app.use(requestId);
 app.use(httpLogger);
 
-// ─── Body parsing ────────────────────────────────────────────────────────────
-// The gateway needs to parse the body so onProxyReq can restream it to the
-// downstream service. Without this req.body is undefined and the downstream
-// receives an empty body — causing validation failures and 500 errors.
+// ─── Body parsing ─────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "1mb", strict: false }));
 app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 
-// ─── Rate limiting ────────────────────────────────────────────────────────────
+// Log parsed body for POST requests
+app.use((req, res, next) => {
+  if (["POST","PATCH","PUT"].includes(req.method)) {
+    console.log(`[BODY] ${req.method} ${req.originalUrl} body=${JSON.stringify(req.body)}`);
+  }
+  next();
+});
+
 app.use(globalLimiter);
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -94,7 +100,6 @@ app.use("/api/billing",   billingRoutes);
 app.use("/api/events",    eventRoutes);
 app.use("/api/simulator", simulatorRoutes);
 
-// ─── Fallback & errors ────────────────────────────────────────────────────────
 app.use(notFound);
 app.use(errorHandler);
 
